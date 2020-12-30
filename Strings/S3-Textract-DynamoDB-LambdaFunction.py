@@ -22,9 +22,23 @@ def getTextractData(bucketName, documentKey):
             detectedText += item['Text'] + ';' 
     return detectedText
 
+def getFileName(key):
+    try:
+        generateFileName = os.path.split(key)[1]
+        splitpath1 = generateFileName.replace('.', '_')
+        splitpath2 = splitpath1.split('_')
+        print(splitpath2[0])
+        print(splitpath2[1])
+        print(splitpath2[2])
+        
+        
+    except Exception as e:
+        print('Filename couldnt be generated from the image file')
+        raise e
+
 #Write OCR output to S3 file
 def writeTextractToS3File(textractData, createdS3Document):
-    generateFilePath = os.path.splitext(createdS3Document)[0] + '.txt' #generate FilePath with the original file's path
+    generateFilePath = os.path.splitext(createdS3Document)[0] + '.txt' #generate FilePath with the original file's path (function removes the extension! (.png in this case))
     s3.put_object(Body=textractData, Bucket="results-ocr-backend", Key=generateFilePath) #generate the Text File
 
 
@@ -44,7 +58,7 @@ def parseString(textInput):
     recList = list() #this is the actual dictionary of items
     itemListIndex = [] #indexes of all items are stored here
     alphaTest = ''
-    #containsLetters = False
+    containsLetters = False
     
 
 
@@ -121,10 +135,12 @@ def lambda_handler(event, context):
 
     bucket = event['Records'][0]['s3']['bucket']['name']
     key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
-
+    print(key)
     try:
         detectedText = getTextractData(bucket, key)
-        a = parseString(detectedText)
+        writeTextractToS3File(detectedText, key)
+        parseString(detectedText)
+        getFileName(key)
 
     except Exception as e:
         print(e)
