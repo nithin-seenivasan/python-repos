@@ -3,6 +3,7 @@ import boto3
 import os
 import urllib.parse
 from decimal import Decimal
+import uuid
 
 print('loading OCR function')
 
@@ -23,14 +24,16 @@ def getTextractData(bucketName, documentKey):
     return detectedText
 
 def getFileName(key):
+    userID = ''
+    timeStamp = ''
     try:
         generateFileName = os.path.split(key)[1]
         splitpath1 = generateFileName.replace('.', '_')
         splitpath2 = splitpath1.split('_')
-        print(splitpath2[0])
-        print(splitpath2[1])
-        print(splitpath2[2])
-        
+        userID = splitpath2[0]
+        timeStamp = splitpath2[1]
+        #print(splitpath2[2])
+        return userID, timeStamp
         
     except Exception as e:
         print('Filename couldnt be generated from the image file')
@@ -112,20 +115,30 @@ def parseString(textInput):
                 isNotItemName = False                
         j += 1
     recList.append(record.copy())
-    insert_data(recList)
-
+    #insert_data(recList)
+    return recList
+    
 # insert_data function for inserting data into dynamodb table
-def insert_data(recordsList):
-    table = dynamodb.Table('userdata-dev')
+def insert_data(recordsList, id, timestamp):
+    table = dynamodb.Table('Post-6tmydhflnbgwfjkinmifpqf3xq-dev')
     print('initialized the dev - table ')
     for m in range(len(recordsList)):
+        uuid_inserted = uuid.uuid4()
+        uuidstr = str(uuid_inserted)
         record = recordsList[m]
         table.put_item(
             Item={
-                'uid': str(m),
-                'Itemname': record['Itemname'],
-                'Price': record['Price'],
-                'QuantityUnit': record['QuantityUnit']
+                'owner': id,
+                'id': uuidstr,
+                'rating': record['Price'],                
+                'title': record['Itemname'],
+                '__typename': 'Post',
+                '_lastChangedAt': 1609504843900,
+                '_version': '1',
+                'createdAt': '2021-01-01T12:40:43.883Z',
+                'status': 'DRAFT',
+                'updatedAt': '2021-01-01T12:40:43.883Z'
+                #'QuantityUnit': record['QuantityUnit'], 'timestamp_itemname': timestamp + '_' + str(m),
             }
         )
     print('Writing to DB Successful')
@@ -139,9 +152,10 @@ def lambda_handler(event, context):
     try:
         detectedText = getTextractData(bucket, key)
         writeTextractToS3File(detectedText, key)
-        parseString(detectedText)
-        getFileName(key)
-
+        returnList = parseString(detectedText)
+        id,timestamp = getFileName(key)
+        insert_data(returnList, id, timestamp)
+        
     except Exception as e:
         print(e)
         print('Error getting object {} from bucket {}. Make sure they exist and your bucket is in the same region as this function.'.format(key, bucket))
