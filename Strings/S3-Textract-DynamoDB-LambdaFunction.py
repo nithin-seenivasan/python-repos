@@ -4,6 +4,9 @@ import os
 import urllib.parse
 from decimal import Decimal
 import uuid
+import re
+import datetime
+
 
 print('loading OCR function')
 
@@ -30,7 +33,7 @@ def getFileName(key):
         generateFileName = os.path.split(key)[1]
         splitpath1 = generateFileName.replace('.', '_')
         splitpath2 = splitpath1.split('_')
-        userID = splitpath2[0]
+        userID = splitpath2[0] # UserID from Auth in Flutter
         timeStamp = splitpath2[1]
         #print(splitpath2[2])
         return userID, timeStamp
@@ -63,8 +66,44 @@ def parseString(textInput):
     alphaTest = ''
     containsLetters = False
     
-
-
+    #recognize purchase Store name
+    
+    #Recorgnize datetime deactivated, since Local OCR does it anyway - Why waste Lambda processing time? 
+    # recorddate = False
+    # while (j<len(lines) and recorddate==False):
+    #     txt = lines[j]
+    #     xx = re.search("([0-2][0-9])\.([0-1][0-9])\.([2-3][0-9])", txt)
+    #     if(str(xx) != "None"):
+    #         recorddate = True
+    #         purchasedate = xx.string
+    #     j+=1
+    
+    # j=0
+    # recordtime = False
+    # while (j<len(lines) and recordtime==False):
+    #     txt = lines[j]
+    #     xx = re.search("([0-2][0-9])\:([0-5][0-9])", txt)
+    #     if(str(xx) != "None"):
+    #         purchasetime = xx.string
+    #         recordtime = True
+    #     j+=1
+        
+    # mergedstrings = purchasedate+purchasetime
+    # billdatetime = re.sub("[^\w]+",'',mergedstrings)
+    
+    j=0
+    storename = False
+    while (j<len(lines)):
+        if(storename == False):
+            txt = lines[j]
+            xx = re.search("(([D][L]))", txt)
+            if(str(xx) != "None"):
+                storename = True
+            j+=1
+        else:
+            purchaseStore = lines[j]
+            j=len(lines)
+    
     #recognizes the start and end of each bill - the keywords are in lists and are declared
     #Logic - it looks for each item in the lists 'enditemlist' and 'startitemlist' in the indexed element of the 'lines' list
     while(i<len(lines)):
@@ -116,10 +155,12 @@ def parseString(textInput):
         j += 1
     recList.append(record.copy())
     #insert_data(recList)
-    return recList
+    return recList, purchaseStore
     
 # insert_data function for inserting data into dynamodb table
-def insert_data(recordsList, id, timestamp):
+def insert_data(recordsList, id, timestamp, storename):
+    timesinceepoch = round(datetime.datetime.now().timestamp())
+    datestring = (datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3])+"Z"
     table = dynamodb.Table('Post-6tmydhflnbgwfjkinmifpqf3xq-dev')
     print('initialized the dev - table ')
     for m in range(len(recordsList)):
@@ -128,16 +169,18 @@ def insert_data(recordsList, id, timestamp):
         record = recordsList[m]
         table.put_item(
             Item={
-                'owner': id,
-                'id': uuidstr,
-                'rating': record['Price'],                
-                'title': record['Itemname'],
-                '__typename': 'Post',
-                '_lastChangedAt': 1609504843900,
+                'id': uuidstr, #UUID (random number)
+                'itemname': record['Itemname'],
+                'price': record['Price'],
+                'quantityunit': record['QuantityUnit'],
+                'datepurchased': timestamp, #Fill this with the Timestamp string or pull string out
+                'owner': id, #userID from flutter
+                'supername': storename, #Pull out the branch name from metadata or here 
+                '_lastChangedAt': timesinceepoch, #use timestamp somehow
                 '_version': '1',
-                'createdAt': '2021-01-01T12:40:43.883Z',
-                'status': 'DRAFT',
-                'updatedAt': '2021-01-01T12:40:43.883Z'
+                'createdAt': datestring,
+                'updatedAt': datestring
+
                 #'QuantityUnit': record['QuantityUnit'], 'timestamp_itemname': timestamp + '_' + str(m),
             }
         )
@@ -152,9 +195,9 @@ def lambda_handler(event, context):
     try:
         detectedText = getTextractData(bucket, key)
         writeTextractToS3File(detectedText, key)
-        returnList = parseString(detectedText)
-        id,timestamp = getFileName(key)
-        insert_data(returnList, id, timestamp)
+        returnList,storename = parseString(detectedText)
+        id, datetimeofpurchase = getFileName(key)
+        insert_data(returnList, id, datetimeofpurchase, storename)
         
     except Exception as e:
         print(e)
