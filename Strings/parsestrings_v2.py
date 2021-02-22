@@ -1,6 +1,6 @@
 import re
 
-file = open('D:\\lines2.txt')
+file = open('D:\\lines5.txt')
 lines = file.read().split(';')
 
 
@@ -26,6 +26,17 @@ while (j<len(lines) and recorddate==False):
     if(str(xx) != "None"):
         recorddate = True
         purchasedate = xx.string
+    j+=1
+
+j = 0
+recorddate = False
+while (j<len(lines) and recorddate==False):
+    txt = lines[j]
+    substring1 = "Datum"
+    if substring1 in txt: 
+        print(txt[6:].replace(".", ""))
+        print(lines[j+1][:5].replace(":",""))
+        recorddate = True
     j+=1
 
 j=0
